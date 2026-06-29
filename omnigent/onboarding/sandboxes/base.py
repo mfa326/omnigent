@@ -387,6 +387,12 @@ class SandboxLauncher(ABC):
         processes are reaped on exec return (e.g. OpenShell) override this
         to hold the exec stream open instead.
 
+        *command* is executed through ``bash -lc`` so that leading environment
+        assignments (e.g. ``"OMNIGENT_HOST_TOKEN=… omnigent host …"``) are
+        parsed as shell assignments rather than as arguments to ``nohup``.
+        Without this, ``setsid nohup FOO=bar cmd`` treats ``FOO=bar`` as the
+        executable name on images where ``setsid`` is a standalone binary.
+
         :param sandbox_id: Target sandbox.
         :param command: Shell command to background, e.g.
             ``"ENV=val omnigent host --server https://…"``.
@@ -397,7 +403,7 @@ class SandboxLauncher(ABC):
         """
         return self.run(
             sandbox_id,
-            f"setsid nohup {command} > {log_path} 2>&1 < /dev/null & echo launched",
+            f"setsid nohup bash -lc {shlex.quote(command)} > {log_path} 2>&1 < /dev/null & echo launched",
         )
 
     def put(self, sandbox_id: str, local_path: Path, remote_path: str) -> None:
