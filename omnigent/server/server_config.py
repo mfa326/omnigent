@@ -55,28 +55,8 @@ def resolve_config_path() -> Path | None:
     return default if default.is_file() else None
 
 
-def _expand_env_vars(value: Any) -> Any:
-    """Recursively expand ``$VAR`` / ``${VAR}`` references in config values.
-
-    Supports strings, mappings, and lists so operators can write PaaS-
-    friendly values like ``server_url: https://${RAILWAY_PUBLIC_DOMAIN}``.
-    """
-    if isinstance(value, str):
-        return os.path.expandvars(value)
-    if isinstance(value, dict):
-        return {k: _expand_env_vars(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_expand_env_vars(item) for item in value]
-    return value
-
-
 def load_server_config() -> dict[str, Any]:
     """Load the resolved server config file into a dict.
-
-    Environment variables referenced with ``$VAR`` or ``${VAR}`` are
-    expanded recursively, so PaaS-injected values (e.g. Railway's
-    ``RAILWAY_PUBLIC_DOMAIN``) can be used directly in YAML without
-    hardcoding URLs.
 
     :returns: The parsed mapping, or an empty dict when no config file is
         resolved. A present-but-unreadable / malformed file logs a
@@ -95,7 +75,6 @@ def load_server_config() -> dict[str, Any]:
     if not isinstance(data, dict):
         logger.warning("server config %s is not a mapping — ignoring", path)
         return {}
-    data = _expand_env_vars(data)
     logger.info("loaded server config from %s", path)
     return data
 
