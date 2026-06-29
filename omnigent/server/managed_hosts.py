@@ -103,9 +103,7 @@ stores into ``create_app``):
 from __future__ import annotations
 
 import asyncio
-import copy
 import logging
-import os
 import re
 import secrets
 import time
@@ -603,51 +601,6 @@ def _unsupported_launcher_factory(provider: str) -> Callable[[], SandboxLauncher
     return _reject
 
 
-def _apply_sandbox_env_overrides(raw: dict[str, object]) -> dict[str, object]:
-    """Override ``sandbox:`` YAML values with PaaS-friendly env vars.
-
-    Lets operators configure the sandbox provider, server URL, and Modal
-    image/secrets through environment variables (Railway/Render/Fly/etc.)
-    instead of editing the config file per deployment. Env vars win over
-    YAML so that a single committed config template works across stages.
-
-    Supported variables:
-
-    - ``OMNIGENT_SANDBOX_PROVIDER`` → ``sandbox.provider``
-    - ``OMNIGENT_SANDBOX_SERVER_URL`` → ``sandbox.server_url``
-    - ``OMNIGENT_SANDBOX_MODAL_IMAGE`` → ``sandbox.modal.image``
-    - ``OMNIGENT_SANDBOX_MODAL_SECRETS`` → ``sandbox.modal.secrets``
-      (comma-separated Modal secret names)
-    """
-    overridden = copy.deepcopy(raw) if isinstance(raw, dict) else {}
-
-    provider = os.environ.get("OMNIGENT_SANDBOX_PROVIDER")
-    if provider:
-        overridden["provider"] = provider
-
-    server_url = os.environ.get("OMNIGENT_SANDBOX_SERVER_URL")
-    if server_url:
-        overridden["server_url"] = server_url
-
-    modal_image = os.environ.get("OMNIGENT_SANDBOX_MODAL_IMAGE")
-    modal_secrets = os.environ.get("OMNIGENT_SANDBOX_MODAL_SECRETS")
-
-    if modal_image or modal_secrets:
-        modal = overridden.get("modal")
-        if modal is None:
-            modal = {}
-            overridden["modal"] = modal
-        if isinstance(modal, dict):
-            if modal_image:
-                modal["image"] = modal_image
-            if modal_secrets:
-                modal["secrets"] = [
-                    s.strip() for s in modal_secrets.split(",") if s.strip()
-                ]
-
-    return overridden
-
-
 def parse_sandbox_config(raw: object) -> ManagedSandboxConfig | None:
     """
     Parse and validate the server config's ``sandbox:`` section.
@@ -667,7 +620,6 @@ def parse_sandbox_config(raw: object) -> ManagedSandboxConfig | None:
         return None
     if not isinstance(raw, dict):
         raise ValueError("server config 'sandbox' must be a mapping")
-    raw = _apply_sandbox_env_overrides(raw)
     provider = raw.get("provider")
     if provider not in SUPPORTED_SANDBOX_PROVIDERS:
         supported = ", ".join(sorted(SUPPORTED_SANDBOX_PROVIDERS))
