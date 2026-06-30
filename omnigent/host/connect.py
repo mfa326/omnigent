@@ -456,6 +456,13 @@ def _build_runner_env(
     env[RUNNER_PARENT_PID_ENV_VAR] = str(parent_pid)
     if auth_token:
         env[RUNNER_AUTH_TOKEN_ENV_VAR] = auth_token
+    import logging as _logging
+    _logging.getLogger("omnigent.host.connect").info(
+        "DEBUG _build_runner_env: auth_token_present=%s env_var=%s env_value_prefix=%s",
+        bool(auth_token),
+        RUNNER_AUTH_TOKEN_ENV_VAR,
+        env.get(RUNNER_AUTH_TOKEN_ENV_VAR, "")[:20] if env.get(RUNNER_AUTH_TOKEN_ENV_VAR) else "N/A",
+    )
     return env
 
 

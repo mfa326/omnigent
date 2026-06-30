@@ -5897,6 +5897,13 @@ async def _launch_runner_on_host(
         if auth_provider is not None and host_conn.owner is not None
         else None
     )
+    _logger.info(
+        "DEBUG runner_auth_token: owner=%r provider=%s token_present=%s token_prefix=%s",
+        host_conn.owner,
+        type(auth_provider).__name__ if auth_provider is not None else "None",
+        runner_auth_token is not None,
+        runner_auth_token[:20] if runner_auth_token else "N/A",
+    )
 
     await asyncio.to_thread(
         conversation_store.replace_runner_id,

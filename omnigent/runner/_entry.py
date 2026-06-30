@@ -312,6 +312,11 @@ def _make_auth_token_factory(
     from omnigent.runner.identity import RUNNER_AUTH_TOKEN_ENV_VAR
 
     _managed_owner_jwt = os.environ.get(RUNNER_AUTH_TOKEN_ENV_VAR)
+    _logger.info(
+        "DEBUG _make_auth_token_factory: env_var=%s env_value_prefix=%s",
+        RUNNER_AUTH_TOKEN_ENV_VAR,
+        _managed_owner_jwt[:20] if _managed_owner_jwt else "N/A",
+    )
     if _managed_owner_jwt and _managed_owner_jwt.strip():
         _jwt = _managed_owner_jwt.strip()
         return lambda: _jwt
