@@ -16,7 +16,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator
+from collections.abc import AsyncIterator, Callable, Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -220,9 +220,9 @@ class _RunnerDatabricksAuth(httpx.Auth):
         # account (the forwarder's POST /events otherwise 403s). Empty when
         # none recorded. Set once here; it persists across the retry yield.
         if self._server_url:
-            from omnigent.cli_auth import databricks_org_id_headers
+            from omnigent.cli_auth import databricks_request_headers
 
-            request.headers.update(databricks_org_id_headers(self._server_url))
+            request.headers.update(databricks_request_headers(self._server_url))
         if self._factory is not None:
             token = self._factory()
             if not token:
@@ -301,6 +301,26 @@ def _make_auth_token_factory(
     :returns: A sync callable returning a bearer token string, or
         ``None`` when no refresh mechanism is available.
     """
+    # Managed-sandbox runner: the server mints a short-lived owner JWT at launch
+    # and the host seeds it as RUNNER_AUTH_TOKEN_ENV_VAR. It is the only
+    # credential such a runner has (no stored OIDC token, no Databricks config),
+    # so return it as the highest-priority source. Because EVERY runner→server
+    # auth path funnels through this factory — the WS tunnel, the HTTP
+    # server_client, and every native transcript forwarder (_runner_auth =
+    # _RunnerDatabricksAuth(_make_auth_token_factory())) — handling it here
+    # authenticates all of them uniformly.
+    from omnigent.runner.identity import RUNNER_AUTH_TOKEN_ENV_VAR
+
+    _managed_owner_jwt = os.environ.get(RUNNER_AUTH_TOKEN_ENV_VAR)
+    _logger.info(
+        "DEBUG _make_auth_token_factory: env_var=%s env_value_prefix=%s",
+        RUNNER_AUTH_TOKEN_ENV_VAR,
+        _managed_owner_jwt[:20] if _managed_owner_jwt else "N/A",
+    )
+    if _managed_owner_jwt and _managed_owner_jwt.strip():
+        _jwt = _managed_owner_jwt.strip()
+        return lambda: _jwt
+
     from omnigent.inner.databricks_executor import (
         DatabricksAuthError,
         _DatabricksBearerAuth,
@@ -670,7 +690,7 @@ def create_app(
         a second time during runner boot.
     :returns: A runner FastAPI app exposing the harness-contract subset.
     """
-    from omnigent.cli_auth import databricks_org_id_headers
+    from omnigent.cli_auth import databricks_request_headers
     from omnigent.runner.app import create_runner_app
     from omnigent.runner.identity import (
         OMNIGENT_INTERNAL_WS_ORIGIN,
@@ -727,7 +747,7 @@ def create_app(
         #
         # The workspace-routing header (empty unless a ?o= selector was
         # recorded for this server) routes these callbacks to the workspace.
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN, **databricks_org_id_headers(server_url)},
+        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN, **databricks_request_headers(server_url)},
         timeout=httpx.Timeout(5.0, read=None),
         # NOTE: ``follow_redirects`` deliberately stays False.
         # ``_RunnerDatabricksAuth.auth_flow`` needs to *see* the
@@ -858,9 +878,16 @@ def create_app(
 
         shutil.rmtree(_spec_cache_root, ignore_errors=True)
 
-    app.add_event_handler("startup", _start_pm)
-    app.add_event_handler("shutdown", _stop_pm)
+    # starlette 1.x removed add_event_handler; drive startup/shutdown via lifespan.
+    @contextlib.asynccontextmanager
+    async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        await _start_pm()
+        try:
+            yield
+        finally:
+            await _stop_pm()
 
+    app.router.lifespan_context = _lifespan
     return app
 
 
@@ -873,6 +900,9 @@ async def _run_tunnel_from_env() -> None:
     from omnigent.runner.transports.ws_tunnel.serve import serve_tunnel
 
     server_url = _server_url_from_env()
+    # In a managed sandbox this factory returns the server-minted owner JWT (see
+    # _make_auth_token_factory) — the single source every runner→server auth path
+    # uses (this tunnel, the HTTP server_client, and the native forwarders).
     auth_token_factory = _make_auth_token_factory()
     auth_token = auth_token_factory() if auth_token_factory is not None else None
     binding_token = _runner_tunnel_binding_token_from_env()
@@ -893,7 +923,9 @@ async def _run_tunnel_from_env() -> None:
     # runner resolves Databricks auth once at boot, not twice.
     app = create_app(auth_token_factory=auth_token_factory)
     idle_timeout_s = _load_runner_idle_timeout_s_from_config()
-    await app.router.startup()
+    # starlette 1.x removed Router.startup/shutdown; drive the lifespan manually.
+    _lifespan_cm = app.router.lifespan_context(app)
+    await _lifespan_cm.__aenter__()
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     last_activity_at = loop.time()
@@ -989,7 +1021,7 @@ async def _run_tunnel_from_env() -> None:
         if idle_task is not None:
             with contextlib.suppress(asyncio.CancelledError):
                 await idle_task
-        await app.router.shutdown()
+        await _lifespan_cm.__aexit__(None, None, None)
 
 
 def _install_signal_handlers(
