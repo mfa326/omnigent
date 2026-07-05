@@ -58,6 +58,8 @@ env:
 
 jobs:
   triage:
+    # Security triage uses org secrets and LLM endpoints; keep it in the canonical repo.
+    if: github.repository == 'omnigent-ai/omnigent'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

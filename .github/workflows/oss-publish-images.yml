@@ -301,8 +301,9 @@ jobs:
     # Daily cron (or a manual force_nightly dispatch): move :latest-nightly to
     # the current main build by retagging :latest-dev with `crane tag`
     # (digest-preserving, no rebuild).
-    # Repository gate removed so forks can also run nightly promotion.
-    if: github.event_name == 'schedule' || inputs.force_nightly
+    # Scheduled promotion only makes sense in the canonical repo; manual
+    # force_nightly dispatches are still allowed in forks.
+    if: (github.event_name == 'schedule' && github.repository == 'omnigent-ai/omnigent') || inputs.force_nightly
     permissions:
       contents: read
       packages: write # retag within GHCR via GITHUB_TOKEN

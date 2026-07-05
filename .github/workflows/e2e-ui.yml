@@ -68,6 +68,8 @@ jobs:
   setup:
     name: setup
     needs: gate
+    # Nightly schedule should only run in the canonical repo; PRs/dispatch still run in forks.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -89,6 +91,8 @@ jobs:
         run: bash .github/scripts/ci/e2e-shard-matrix.sh
 
   e2e-ui:
+    # Nightly schedule should only run in the canonical repo; PRs/dispatch still run in forks.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     name: E2E UI Tests (shard ${{ matrix.shard_id }}/${{ matrix.num_shards }})
     # Draft PRs resolve to an EMPTY matrix in `setup`, so no shard runs for
     # them. Fork PRs DO run (mock LLM, no secrets) -- same as ci.yml.

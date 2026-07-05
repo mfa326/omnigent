@@ -49,6 +49,8 @@ jobs:
   setup:
     name: setup
     needs: gate
+    # Nightly schedule should only run in the canonical repo; PRs/dispatch still run in forks.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -71,6 +73,8 @@ jobs:
         run: bash .github/scripts/ci/integration-matrix.sh
 
   integration:
+    # Nightly schedule should only run in the canonical repo; PRs/dispatch still run in forks.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     name: Integration (${{ matrix.name }})
     # Draft PRs resolve to an EMPTY matrix in `setup`, so this job produces zero
     # leg runs (and thus no skipped placeholder check). Fork PRs DO run (mock

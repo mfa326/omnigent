@@ -44,6 +44,8 @@ jobs:
   # "mock-model"); e2e is sharded per cell. See backcompat-pairwise-matrix.sh.
   setup:
     name: setup
+    # Scheduled compatibility sweep only makes sense in the canonical repo.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -67,6 +69,8 @@ jobs:
   # tests/e2e for every (server, runner) cell × shard.
   backcompat-e2e:
     name: Backcompat e2e (server ${{ matrix.server }} / runner ${{ matrix.runner }}, shard ${{ matrix.shard_id }}/${{ matrix.num_shards }})
+    # Scheduled compatibility sweep only makes sense in the canonical repo.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     needs: setup
     runs-on: ubuntu-latest
     # Job-level cap (composite run steps can't set timeout-minutes); mirrors
@@ -106,6 +110,8 @@ jobs:
   # tests/integration for every (server, runner) cell (openai-agents leg).
   backcompat-integration:
     name: Backcompat integration (server ${{ matrix.server }} / runner ${{ matrix.runner }}, ${{ matrix.harness }})
+    # Scheduled compatibility sweep only makes sense in the canonical repo.
+    if: github.event_name != 'schedule' || github.repository == 'omnigent-ai/omnigent'
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 40
